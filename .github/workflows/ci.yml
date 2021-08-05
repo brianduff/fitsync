@@ -14,5 +14,6 @@ jobs:
 
       - name: Run tests
         run: |
+          rustup default nightly
           cargo build
           cargo clippy
