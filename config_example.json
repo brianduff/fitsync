@@ -1,0 +1,12 @@
+{
+  "auth": {
+    "fitbit": {
+      "id": "YOUR CLIENT ID HERE",
+      "secret": "YOUR CLIENT SECRET HERE"
+    },
+    "google": {
+      "id": "",
+      "secret": ""
+    }
+  }
+}

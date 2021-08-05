@@ -1,0 +1,153 @@
+body {
+  font-family: "Anaheim", "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background-color: #222233;
+  color: #efefef;
+  margin: 0;
+}
+
+.AppTitle {
+  font-size: 5vmin;
+}
+
+.AppLogo {
+  width: 100%;
+}
+
+.MainGrid {
+  display: grid;
+  grid-template-columns: 10vmin auto;
+  grid-template-rows: auto 100%;
+  column-gap: 20px;
+  align-items: center;
+  height: 100%;
+}
+
+.MainContent {
+  overflow: auto;
+  align-self: start;
+}
+
+.StatusBar {
+  background-color: #444455;
+  padding: 4px;
+}
+
+.UserSelector {
+  list-style-type: none; /* Remove bullets */
+  padding: 0; /* Remove padding */
+  margin: 0; /* Remove margins */
+
+  font-size: 18pt;
+}
+
+button {
+  transition: background-color 0.15s;
+  background: none;
+  color: inherit;
+  border: 1px solid #a0a0a0;
+  font: inherit;
+  cursor: pointer;
+  outline: inherit;
+  text-align: center;
+  padding-left: 15px;
+  padding-right: 15px;
+  padding-top: 7px;
+  padding-bottom: 7px;
+}
+
+button:hover:enabled {
+  background-color: #a0a0d0;
+}
+
+button:hover:disabled {
+  cursor: not-allowed;
+}
+
+button:disabled {
+  color: #c0c0c0;
+}
+
+.UserTile:hover {
+  background-color: #a0a0d0;
+}
+
+.UserTile {
+  transition: background-color 0.15s;
+  background: none;
+  color: inherit;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  outline: inherit;
+  width: 100%;
+  text-align: left;
+  display: grid;
+  grid-template-columns: 30px auto;
+  align-items: center;
+  column-gap: 5px;
+  padding: 10px;
+}
+
+.Form {
+  padding-left: 25px;
+  padding-right: 25px;
+}
+
+.PasswordForm {
+  display: grid;
+  grid-template-columns: max-content auto;
+  column-gap: 10px;
+  row-gap: 10px;
+}
+
+input {
+  font-family: inherit;
+  font-size: inherit;
+  border: 1px solid #a0a0d0;
+  color: inherit;
+  background: none;
+  padding: 6px;
+}
+
+input::placeholder {
+  color: #9999b1;
+}
+
+select {
+  border: 1px solid #a0a0d0;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  padding: 5px;
+}
+
+.Validation {
+  color: #ffcccc;
+}
+
+.SchedulePeriod {
+  display: grid;
+  grid-template-columns: max-content max-content max-content max-content auto max-content max-content;
+  align-items: center;
+  column-gap: 5px;
+  padding-bottom: 10px;
+}
+
+.IconButton {
+  padding: 7;
+  border: none;
+}
+
+.Hidden {
+  visibility: hidden;
+}
+
+.OkStatus {
+  color: greenyellow;
+}
+
+.NotOkStatus {
+  color: red;
+}
