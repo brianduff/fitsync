@@ -1,11 +1,13 @@
 use std::time::Duration;
 
-use crate::{fitbit, state};
+use crate::{
+  fitbit::{BodyType, FitbitClient, GetBodyRequest, StartDate, TimePeriod},
+  state,
+};
 use anyhow::Result;
 use clokwerk::{ScheduleHandle, Scheduler, TimeUnits};
 use log::{info, warn};
 use oauth2::TokenResponse;
-use reqwest::header::AUTHORIZATION;
 
 pub fn synchronize() {
   info!("Beginning sync...");
@@ -21,17 +23,17 @@ pub fn synchronize() {
 fn synchronize_impl() -> Result<()> {
   let token = state::get_stored_token("fitbit");
   if let Some(token) = token {
-    let url = "https://api.fitbit.com/1/user/-/body/weight/date/today/max.json";
     let sekrit = token.access_token().secret();
 
-    let client = reqwest::blocking::Client::new();
-    let res = client
-      .get(url)
-      .header(AUTHORIZATION, format!("Bearer {}", sekrit))
-      .header("Accept-Language", "en_US")
-      .send()?;
+    let client = FitbitClient::new(|| Ok(sekrit.to_owned()));
 
-    println!("{:?}", fitbit::deserialize(res.text()?));
+    let result = client.get_body(GetBodyRequest {
+      body_type: BodyType::Weight,
+      start_date: StartDate::today(),
+      time_period: TimePeriod::Max,
+    })?;
+
+    println!("{:?}", result);
   } else {
     info!("No token for fitbit. Skipping sync.")
   }
