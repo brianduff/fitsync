@@ -26,10 +26,7 @@ pub struct AppState {
 fn launch_browser(r: &Rocket) {
   let port = r.config().port;
 
-  Command::new("open")
-    .arg(format!("http://localhost:{}/", port))
-    .output()
-    .expect("Failed");
+  webbrowser::open(&format!("http://localhost:{}/", port)).unwrap();
 }
 
 fn main() -> Result<()> {
