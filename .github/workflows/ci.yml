@@ -17,4 +17,4 @@ jobs:
           rustup default nightly
           rustup component add clippy
           cargo build
-          cargo clippy -- --no-deps
+          cargo clippy -p fitsync -- --no-deps
