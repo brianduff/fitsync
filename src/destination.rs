@@ -5,29 +5,59 @@ use std::{
   path::PathBuf,
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use chrono::{NaiveDateTime, Utc};
+use csv::Writer;
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 
-use crate::fitbit::FitbitClient;
+use crate::fitbit::{FitbitClient, TimeSeriesValue};
 
 type DestinationId = String;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CsvFile {
   path: PathBuf,
 }
 
-#[derive(Serialize, Deserialize)]
+impl DestinationAppender for CsvFile {
+  fn append_data(&self, data: Vec<TimeSeriesValue>) -> Result<()> {
+    let mut writer = Writer::from_path(&self.path)?;
+    for d in data {
+      writer.serialize(&d)?;
+    }
+
+    Ok(())
+  }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub enum DestinationKind {
   CsvFile(CsvFile),
 }
 
-#[derive(Serialize, Deserialize)]
+impl DestinationKind {
+  fn get_appender(&self) -> Box<dyn DestinationAppender> {
+    match self {
+      Self::CsvFile(file) => Box::new(file.clone()),
+    }
+  }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Destination {
   id: DestinationId,
   kind: DestinationKind,
+}
+
+trait DestinationAppender {
+  fn append_data(&self, data: Vec<TimeSeriesValue>) -> Result<()>;
+}
+
+impl Destination {
+  pub fn append_data(&self, data: Vec<TimeSeriesValue>) -> Result<()> {
+    self.kind.get_appender().append_data(data)
+  }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -38,7 +68,12 @@ pub struct DestinationConfig {
 impl DestinationConfig {
   fn new() -> Self {
     DestinationConfig {
-      destinations: vec![],
+      destinations: vec![Destination {
+        id: "csv".to_owned(),
+        kind: DestinationKind::CsvFile(CsvFile {
+          path: PathBuf::from("basic.csv"),
+        }),
+      }],
     }
   }
 }
@@ -99,10 +134,16 @@ impl Destinations {
 
   pub fn process<F>(&mut self, processor: F, client: &FitbitClient) -> Result<()>
   where
-    F: Fn(&Destination, &FitbitClient) -> Result<()>,
+    F: Fn(&Destination, &FitbitClient, Option<NaiveDateTime>) -> Result<()>,
   {
     for dest in self.config.destinations.iter() {
-      processor(dest, client)?;
+      let last_synced = if let Some(data) = self.cache.data.get(&dest.id) {
+        data.last_synced
+      } else {
+        None
+      };
+
+      processor(dest, client, last_synced)?;
       let last_synced = Some(Utc::now().naive_local());
       if let Some(data) = self.cache.data.get_mut(&dest.id) {
         data.last_synced = last_synced;

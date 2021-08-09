@@ -5,12 +5,12 @@ use anyhow::Context;
 use anyhow::Result;
 use chrono::NaiveDate;
 use reqwest::{blocking::Client, header::AUTHORIZATION};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use strum_macros::ToString;
 
 use crate::auth::OAuthClient;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TimeSeriesValue {
   #[serde(with = "date_format")]
@@ -227,7 +227,7 @@ impl FitbitClient {
 
 mod date_format {
   use chrono::NaiveDate;
-  use serde::{self, Deserialize, Deserializer};
+  use serde::{self, Deserialize, Deserializer, Serializer};
   const FORMAT: &str = "%Y-%m-%d";
 
   pub fn deserialize<'de, D>(deserializer: D) -> Result<NaiveDate, D::Error>
@@ -237,10 +237,19 @@ mod date_format {
     let s = String::deserialize(deserializer)?;
     NaiveDate::parse_from_str(&s, FORMAT).map_err(serde::de::Error::custom)
   }
+
+  pub fn serialize<S>(date: &NaiveDate, serializer: S) -> Result<S::Ok, S::Error>
+  where
+    S: Serializer,
+  {
+    let s = format!("{}", date.format(FORMAT));
+    serializer.serialize_str(&s)
+  }
 }
 
 mod value_format {
-  use serde::{self, Deserialize, Deserializer};
+  use serde::{self, Deserialize, Deserializer, Serializer};
+
   pub fn deserialize<'de, D>(deserializer: D) -> Result<f32, D::Error>
   where
     D: Deserializer<'de>,
@@ -248,5 +257,12 @@ mod value_format {
     let s = String::deserialize(deserializer)?;
     let v: Result<f32, D::Error> = s.parse().map_err(serde::de::Error::custom);
     v
+  }
+
+  pub fn serialize<S>(value: &f32, serializer: S) -> Result<S::Ok, S::Error>
+  where
+    S: Serializer,
+  {
+    serializer.serialize_f32(*value)
   }
 }

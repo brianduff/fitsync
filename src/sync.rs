@@ -5,7 +5,7 @@ use crate::{
   fitbit::{BodyType, FitbitClient, GetBodyRequest, StartDate, TimePeriod},
 };
 use anyhow::Result;
-use chrono::NaiveDate;
+use chrono::{NaiveDate, NaiveDateTime};
 
 use log::{info, warn};
 
@@ -30,15 +30,19 @@ impl<'a> SyncSession<'a> {
   }
 }
 
-fn sync(destination: &Destination, fitbit_client: &FitbitClient) -> Result<()> {
+fn sync(
+  destination: &Destination,
+  fitbit_client: &FitbitClient,
+  last_synced: Option<NaiveDateTime>,
+) -> Result<()> {
+  info!("Syncing to destination {:?}", destination);
+
   let result = fitbit_client.get_body(GetBodyRequest {
     body_type: BodyType::Weight,
     start_date: StartDate::on_date(NaiveDate::from_ymd(2018, 8, 10)),
     time_period: TimePeriod::Max,
   })?;
-
-  println!("{:?}", result);
-  println!("{} records", result.body_weight.len());
+  destination.append_data(result.body_weight)?;
 
   Ok(())
 }
