@@ -3,8 +3,12 @@
 #[macro_use]
 extern crate rocket;
 
+use std::sync::Mutex;
+
 use anyhow::Result;
 use config::Config;
+use destination::{DestinationConfig, Destinations};
+use directories::ProjectDirs;
 use env_logger::Env;
 use fitbit::FitbitClient;
 use rocket::{fairing::AdHoc, Rocket};
@@ -13,12 +17,15 @@ use rocket_contrib::serve::StaticFiles;
 mod api;
 mod auth;
 mod config;
+mod destination;
 mod fitbit;
 mod runloop;
+mod sync;
 
 pub struct AppState {
   pub fitbit_client: FitbitClient,
   pub config: Config,
+  pub destinations: Mutex<Destinations>,
 }
 
 fn launch_browser(r: &Rocket) {
@@ -38,9 +45,15 @@ fn main() -> Result<()> {
   let fitbit_oauth = auth::OAuthClient::for_service("fitbit", &config.auth.fitbit)?;
   let fitbit_client = FitbitClient::new(fitbit_oauth);
   // let google_client  = auth::OAuthClient::for_service("google"", secrets)
+
+  let project_dirs = ProjectDirs::from("org", "dubh", "fitsync").unwrap();
+
+  let dest = Destinations::load(&project_dirs)?;
+
   let app_state = AppState {
     config,
     fitbit_client,
+    destinations: Mutex::new(dest),
   };
 
   rocket::ignite()

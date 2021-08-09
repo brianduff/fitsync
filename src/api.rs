@@ -1,7 +1,6 @@
 use anyhow::Result;
-use chrono::NaiveDate;
 
-use crate::fitbit::{BodyType, GetBodyRequest, StartDate, TimePeriod};
+use crate::sync::SyncSession;
 use crate::AppState;
 use log::info;
 use rocket::response::Redirect;
@@ -84,19 +83,7 @@ fn fitbit_auth(code: Option<String>, state: State<AppState>) -> Result<Redirect>
 
 #[get("/sync")]
 fn sync(state: State<AppState>) -> Result<()> {
-  // let result = state.fitbit_client.get_body(GetBodyRequest {
-  //   body_type: BodyType::Weight,
-  //   start_date: StartDate::today(),
-  //   time_period: TimePeriod::Max,
-  // })?;
-  let result = state.fitbit_client.get_body(GetBodyRequest {
-    body_type: BodyType::Weight,
-    start_date: StartDate::on_date(NaiveDate::from_ymd(2018, 8, 10)),
-    time_period: TimePeriod::Max,
-  })?;
-
-  println!("{:?}", result);
-  println!("{} records", result.body_weight.len());
+  SyncSession::start(&state.destinations, &state.fitbit_client).sync_all()?;
 
   Ok(())
 }
