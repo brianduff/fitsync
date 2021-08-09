@@ -17,7 +17,6 @@ mod auth;
 mod config;
 mod fitbit;
 mod runloop;
-mod state;
 
 pub struct AppState {
   pub fitbit_client: FitbitClient,
