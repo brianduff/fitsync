@@ -379,6 +379,7 @@ dependencies = [
  "clokwerk",
  "env_logger",
  "keyring",
+ "lazy_static",
  "log 0.4.14",
  "oauth2",
  "reqwest",

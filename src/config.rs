@@ -1,18 +1,13 @@
 use std::path::Path;
 
+use crate::auth::ServiceClient;
 use anyhow::Result;
 use serde::Deserialize;
 
 #[derive(Deserialize)]
-pub struct ClientAuthConfig {
-  pub id: String,
-  pub secret: String,
-}
-
-#[derive(Deserialize)]
 pub struct AuthConfig {
-  pub fitbit: ClientAuthConfig,
-  pub google: ClientAuthConfig,
+  pub fitbit: ServiceClient,
+  pub google: ServiceClient,
 }
 
 #[derive(Deserialize)]

@@ -1,8 +1,14 @@
+use std::sync::Mutex;
+
+use anyhow::anyhow;
+use anyhow::Context;
 use anyhow::Result;
 use chrono::NaiveDate;
 use reqwest::{blocking::Client, header::AUTHORIZATION};
 use serde::Deserialize;
 use strum_macros::ToString;
+
+use crate::auth::OAuthClient;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -17,10 +23,6 @@ pub struct TimeSeriesValue {
 #[serde(rename_all = "kebab-case")]
 pub struct TimeSeriesData {
   pub body_weight: Vec<TimeSeriesValue>,
-}
-
-pub fn deserialize<S: AsRef<str>>(s: S) -> Result<TimeSeriesData> {
-  Ok(serde_json::from_str(s.as_ref())?)
 }
 
 #[derive(ToString)]
@@ -129,32 +131,60 @@ impl ToUrlPath for GetBodyRequest {
   }
 }
 
-pub struct FitbitClient<F>
-where
-  F: Fn() -> Result<String>,
-{
-  token_provider: F,
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "snake_case")]
+enum ErrorType {
+  ExpiredToken,
+  #[serde(other)]
+  Unknown,
+}
+
+#[derive(Deserialize, Debug)]
+struct ApiError {
+  #[serde(rename = "errorType")]
+  error_type: ErrorType,
+  message: String,
+}
+
+#[derive(Deserialize, Debug)]
+struct GenericResponse {
+  success: Option<bool>,
+  errors: Option<Vec<ApiError>>,
+  #[serde(rename = "body-weight")]
+  body_weight: Option<Vec<TimeSeriesValue>>,
+}
+
+impl GenericResponse {
+  fn has_expired_token(&self) -> bool {
+    if let Some(ref errors) = self.errors {
+      errors
+        .iter()
+        .any(|x| matches!(x.error_type, ErrorType::ExpiredToken))
+    } else {
+      false
+    }
+  }
+}
+
+pub trait TokenProvider {
+  fn get_token(&self) -> Result<String>;
+  fn refresh_token(&self) -> Result<String>;
+}
+
+pub struct FitbitClient {
+  pub oauth: Mutex<OAuthClient>,
   http_client: Client,
 }
 
-impl<F> FitbitClient<F>
-where
-  F: Fn() -> Result<String>,
-{
-  pub fn new(token_provider: F) -> Self
-  where
-    F: Fn() -> Result<String>,
-  {
+impl FitbitClient {
+  pub fn new(oauth: OAuthClient) -> Self {
     FitbitClient {
-      token_provider,
+      oauth: Mutex::new(oauth),
       http_client: reqwest::blocking::Client::new(),
     }
   }
 
-  pub fn get_body(&self, request: GetBodyRequest) -> Result<TimeSeriesData> {
-    let url = format!("https://api.fitbit.com/1/user/-{}", request.to_url_path());
-
-    let secret = (self.token_provider)()?;
+  fn make_request_with_secret(&self, url: &str, secret: &str) -> Result<GenericResponse> {
     let res = self
       .http_client
       .get(url)
@@ -162,7 +192,36 @@ where
       .header("Accept-Language", "en_US")
       .send()?;
 
-    deserialize(res.text()?)
+    let text = res.text()?;
+    serde_json::from_str(&text).with_context(|| format!("Couldn't parse: {}", text))
+  }
+
+  fn make_request(&self, url: String) -> Result<GenericResponse> {
+    // TODO: Probably don't need to lock this for the whole duration of the request.
+    let mut unlocked_oauth = self.oauth.lock().unwrap();
+    let secret = unlocked_oauth.get_secret()?;
+    let result = self.make_request_with_secret(&url, &secret)?;
+
+    Ok(if !result.has_expired_token() {
+      result
+    } else {
+      unlocked_oauth.refresh_tokens()?;
+      let new_secret = unlocked_oauth.get_secret()?;
+      self.make_request_with_secret(&url, &new_secret)?
+    })
+  }
+
+  pub fn get_body(&self, request: GetBodyRequest) -> Result<TimeSeriesData> {
+    let response = self.make_request(format!(
+      "https://api.fitbit.com/1/user/-{}",
+      request.to_url_path()
+    ))?;
+
+    if let Some(body_weight) = response.body_weight {
+      Ok(TimeSeriesData { body_weight })
+    } else {
+      Err(anyhow!("Errors in response: {:?}", response))
+    }
   }
 }
 

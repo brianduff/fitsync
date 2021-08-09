@@ -1,17 +1,13 @@
 use anyhow::Result;
+use chrono::NaiveDate;
 
-use oauth2::reqwest::http_client;
-use oauth2::{basic::BasicClient, AuthUrl, AuthorizationCode, ClientId, TokenUrl};
-use oauth2::{ClientSecret, RedirectUrl};
+use crate::fitbit::{BodyType, GetBodyRequest, StartDate, TimePeriod};
+use crate::AppState;
+use log::info;
 use rocket::response::Redirect;
-use rocket::Route;
+use rocket::{Route, State};
 use rocket_contrib::json::Json;
 use serde::{Deserialize, Serialize};
-use std::thread;
-
-use crate::config::Config;
-use crate::runloop;
-use crate::state;
 
 static FITBIT_SCOPES: &str =
   "activity heartrate location nutrition profile settings sleep social weight";
@@ -25,21 +21,21 @@ struct ServiceAuthState {
 }
 
 impl ServiceAuthState {
-  fn create_fitbit(has_token: bool, config: &Config) -> Self {
+  fn create_fitbit(has_token: bool, client_id: String) -> Self {
     ServiceAuthState {
       has_token,
       scopes: FITBIT_SCOPES.to_owned(),
       redirect_uri: "http://localhost:8000/auth/fitbit".to_owned(), // FIXME: port
-      client_id: config.auth.fitbit.id.to_owned(),
+      client_id,
     }
   }
 
-  fn create_google(has_token: bool, config: &Config) -> Self {
+  fn create_google(has_token: bool, client_id: String) -> Self {
     ServiceAuthState {
       has_token,
       scopes: "".to_owned(),
       redirect_uri: "http://localhost:8000/".to_owned(),
-      client_id: config.auth.google.id.to_owned(),
+      client_id,
     }
   }
 }
@@ -51,55 +47,62 @@ struct AuthState {
 }
 
 #[get("/authstate")]
-fn authstate() -> Result<Json<AuthState>> {
-  let has_fitbit_token = state::get_stored_token("fitbit").is_some();
-  let has_google_token = state::get_stored_token("google").is_some();
-  let config = Config::load()?;
+fn authstate(state: State<AppState>) -> Result<Json<AuthState>> {
+  let locked_oauth = state.fitbit_client.oauth.lock().unwrap();
+  let has_fitbit_token = locked_oauth.has_secret();
+  let has_google_token = false;
 
   Ok(Json(AuthState {
-    fitbit: ServiceAuthState::create_fitbit(has_fitbit_token, &config),
-    google: ServiceAuthState::create_google(has_google_token, &config),
+    fitbit: ServiceAuthState::create_fitbit(has_fitbit_token, locked_oauth.get_client_id()),
+    google: ServiceAuthState::create_google(has_google_token, "".to_owned()),
   }))
 }
 
 #[get("/fitbit?<code>")]
-fn fitbit_auth(code: Option<String>) -> Result<Redirect> {
+fn fitbit_auth(code: Option<String>, state: State<AppState>) -> Result<Redirect> {
+  info!("fitbit_auth started");
   match code {
     Some(code) => {
-      let config = Config::load()?;
-
-      let client = BasicClient::new(
-        ClientId::new(config.auth.fitbit.id),
-        Some(ClientSecret::new(config.auth.fitbit.secret)),
-        AuthUrl::new("https://www.fitbit.com/oauth2/authorize".to_string())?,
-        Some(TokenUrl::new(
-          "https://api.fitbit.com/oauth2/token".to_string(),
-        )?),
-      )
-      .set_redirect_uri(RedirectUrl::new(
-        "http://localhost:8000/auth/fitbit".to_string(),
-      )?);
-      let token_result = client
-        .exchange_code(AuthorizationCode::new(code))
-        .request(http_client)
-        .unwrap();
-
-      state::store_token("fitbit", token_result)?;
+      {
+        let mut oauth = state.fitbit_client.oauth.lock().expect("unable to lock");
+        oauth.obtain_tokens(code)?;
+      }
 
       // Force a sync to happen now.
-      thread::spawn(runloop::synchronize);
+      info!("fitbit_auth is requesting a sync");
+      sync(state)?;
 
+      info!("fitbit_auth done, redirecting");
       Ok(Redirect::to("/"))
     }
     None => {
-      println!("Redirected. urm");
+      info!("fitbit_auth called with no code");
       Ok(Redirect::to("/"))
     }
   }
 }
 
+#[get("/sync")]
+fn sync(state: State<AppState>) -> Result<()> {
+  // let result = state.fitbit_client.get_body(GetBodyRequest {
+  //   body_type: BodyType::Weight,
+  //   start_date: StartDate::today(),
+  //   time_period: TimePeriod::Max,
+  // })?;
+  let result = state.fitbit_client.get_body(GetBodyRequest {
+    body_type: BodyType::Weight,
+    start_date: StartDate::on_date(NaiveDate::from_ymd(2018, 8, 10)),
+    time_period: TimePeriod::Max,
+  })?;
+
+  println!("{:?}", result);
+  println!("{} records", result.body_weight.len());
+
+  Ok(())
+}
+
 pub fn get_api_routes() -> Vec<Route> {
-  routes![authstate]
+  routes![authstate, sync]
 }
 
 pub fn get_auth_routes() -> Vec<Route> {
