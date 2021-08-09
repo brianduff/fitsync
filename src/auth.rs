@@ -44,10 +44,6 @@ pub struct OAuthClient {
   client_id: String,
 }
 
-pub struct Tokens {
-  token_response: BasicTokenResponse,
-}
-
 impl OAuthClient {
   pub fn for_service(service_name: &str, secrets: &ServiceClient) -> Result<Self> {
     let urls = URLS.get(service_name).unwrap();
@@ -57,9 +53,10 @@ impl OAuthClient {
       AuthUrl::new(urls.auth_url.to_owned())?,
       Some(TokenUrl::new(urls.token_url.to_owned())?),
     )
-    .set_redirect_uri(RedirectUrl::new(
-      "http://localhost:8000/auth/fitbit".to_string(),
-    )?);
+    .set_redirect_uri(RedirectUrl::new(format!(
+      "http://localhost:8000{}", // TODO: hardcoded port
+      urls.redirect_url_path
+    ))?);
 
     Ok(Self {
       client,

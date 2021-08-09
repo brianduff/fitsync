@@ -1,6 +1,4 @@
-#![feature(proc_macro_hygiene, decl_macro, let_chains, backtrace)]
-
-use std::process::Command;
+#![feature(proc_macro_hygiene, decl_macro, backtrace)]
 
 #[macro_use]
 extern crate rocket;
