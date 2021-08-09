@@ -4,6 +4,8 @@ use anyhow::anyhow;
 use anyhow::Context;
 use anyhow::Result;
 use chrono::NaiveDate;
+use chrono::NaiveDateTime;
+use chrono::NaiveTime;
 use reqwest::{blocking::Client, header::AUTHORIZATION};
 use serde::{Deserialize, Serialize};
 use strum_macros::ToString;
@@ -13,7 +15,6 @@ use crate::auth::OAuthClient;
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TimeSeriesValue {
-  #[serde(with = "date_format")]
   pub date_time: NaiveDate,
   #[serde(with = "value_format")]
   pub value: f32,
@@ -110,6 +111,16 @@ trait ToUrlParameter {
 
 trait ToUrlPath {
   fn to_url_path(&self) -> String;
+
+  fn to_url(&self) -> String {
+    format!("https://api.fitbit.com/1/user/-{}", self.to_url_path())
+  }
+}
+
+impl ToUrlParameter for NaiveDate {
+  fn to_url_parameter(&self) -> String {
+    self.to_string()
+  }
 }
 
 pub struct GetBodyRequest {
@@ -131,6 +142,20 @@ impl ToUrlPath for GetBodyRequest {
   }
 }
 
+pub struct GetWeightLogsRequest {
+  pub base_date: NaiveDate,
+  pub time_period: TimePeriod,
+}
+
+impl ToUrlPath for GetWeightLogsRequest {
+  fn to_url_path(&self) -> String {
+    let base_date = self.base_date.to_url_parameter();
+    let period = self.time_period.to_url_parameter();
+
+    format!("/body/log/weight/date/{}/{}.json", base_date, period)
+  }
+}
+
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "snake_case")]
 enum ErrorType {
@@ -147,11 +172,29 @@ struct ApiError {
 }
 
 #[derive(Deserialize, Debug)]
+pub struct WeightLog {
+  bmi: f32,
+  weight: f32,
+  source: String,
+  #[serde(rename = "logId")]
+  log_id: u64,
+  date: NaiveDate,
+  time: NaiveTime,
+}
+
+impl WeightLog {
+  pub fn date_time(&self) -> NaiveDateTime {
+    NaiveDateTime::new(self.date, self.time)
+  }
+}
+
+#[derive(Deserialize, Debug)]
 struct GenericResponse {
   success: Option<bool>,
   errors: Option<Vec<ApiError>>,
   #[serde(rename = "body-weight")]
   body_weight: Option<Vec<TimeSeriesValue>>,
+  weight: Option<Vec<WeightLog>>,
 }
 
 impl GenericResponse {
@@ -212,10 +255,7 @@ impl FitbitClient {
   }
 
   pub fn get_body(&self, request: GetBodyRequest) -> Result<TimeSeriesData> {
-    let response = self.make_request(format!(
-      "https://api.fitbit.com/1/user/-{}",
-      request.to_url_path()
-    ))?;
+    let response = self.make_request(request.to_url())?;
 
     if let Some(body_weight) = response.body_weight {
       Ok(TimeSeriesData { body_weight })
@@ -223,27 +263,14 @@ impl FitbitClient {
       Err(anyhow!("Errors in response: {:?}", response))
     }
   }
-}
 
-mod date_format {
-  use chrono::NaiveDate;
-  use serde::{self, Deserialize, Deserializer, Serializer};
-  const FORMAT: &str = "%Y-%m-%d";
-
-  pub fn deserialize<'de, D>(deserializer: D) -> Result<NaiveDate, D::Error>
-  where
-    D: Deserializer<'de>,
-  {
-    let s = String::deserialize(deserializer)?;
-    NaiveDate::parse_from_str(&s, FORMAT).map_err(serde::de::Error::custom)
-  }
-
-  pub fn serialize<S>(date: &NaiveDate, serializer: S) -> Result<S::Ok, S::Error>
-  where
-    S: Serializer,
-  {
-    let s = format!("{}", date.format(FORMAT));
-    serializer.serialize_str(&s)
+  pub fn get_weight_logs(&self, request: GetWeightLogsRequest) -> Result<Vec<WeightLog>> {
+    let response = self.make_request(request.to_url())?;
+    if let Some(weight) = response.weight {
+      Ok(weight)
+    } else {
+      Err(anyhow!("Errors in response: {:?}", response))
+    }
   }
 }
 

@@ -2,7 +2,7 @@ use std::sync::{Mutex, MutexGuard};
 
 use crate::{
   destination::{Destination, DestinationConfig, Destinations},
-  fitbit::{BodyType, FitbitClient, GetBodyRequest, StartDate, TimePeriod},
+  fitbit::{BodyType, FitbitClient, GetBodyRequest, GetWeightLogsRequest, StartDate, TimePeriod},
 };
 use anyhow::Result;
 use chrono::{NaiveDate, NaiveDateTime};
@@ -43,6 +43,12 @@ fn sync(
     time_period: TimePeriod::Max,
   })?;
   destination.append_data(result.body_weight)?;
+
+  let result = fitbit_client.get_weight_logs(GetWeightLogsRequest {
+    base_date: NaiveDate::from_ymd(2021, 8, 9),
+    time_period: TimePeriod::OneMonth,
+  })?;
+  println!("Weight logs: {:?}", result);
 
   Ok(())
 }
