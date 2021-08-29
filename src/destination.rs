@@ -1,6 +1,6 @@
 use std::{
   collections::HashMap,
-  fs::{read_to_string, File},
+  fs::{read_to_string, File, OpenOptions},
   io::Write,
   path::PathBuf,
 };
@@ -22,7 +22,13 @@ pub struct CsvFile {
 
 impl DestinationAppender for CsvFile {
   fn append_data(&self, data: Vec<TimeSeriesValue>) -> Result<()> {
-    let mut writer = Writer::from_path(&self.path)?;
+    let file = OpenOptions::new()
+      .create(true)
+      .write(true)
+      .append(true)
+      .open(&self.path)?;
+
+    let mut writer = Writer::from_writer(&file);
     for d in data {
       writer.serialize(&d)?;
     }

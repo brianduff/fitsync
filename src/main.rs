@@ -7,7 +7,7 @@ use std::sync::Mutex;
 
 use anyhow::Result;
 use config::Config;
-use destination::{DestinationConfig, Destinations};
+use destination::Destinations;
 use directories::ProjectDirs;
 use env_logger::Env;
 use fitbit::FitbitClient;

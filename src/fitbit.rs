@@ -39,38 +39,16 @@ impl ToUrlParameter for BodyType {
   }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum DateKind {
+pub enum DateOrToday {
   Today,
-  SpecificDate,
+  OnDate(NaiveDate),
 }
 
-pub struct StartDate {
-  date_kind: DateKind,
-  date: Option<NaiveDate>,
-}
-
-impl StartDate {
-  pub fn today() -> Self {
-    StartDate {
-      date_kind: DateKind::Today,
-      date: None,
-    }
-  }
-
-  pub fn on_date(date: NaiveDate) -> Self {
-    StartDate {
-      date_kind: DateKind::SpecificDate,
-      date: Some(date),
-    }
-  }
-}
-
-impl ToUrlParameter for StartDate {
+impl ToUrlParameter for DateOrToday {
   fn to_url_parameter(&self) -> String {
-    match self.date_kind {
-      DateKind::Today => "today".to_owned(),
-      DateKind::SpecificDate => self.date.unwrap().to_string(),
+    match self {
+      DateOrToday::Today => "today".to_owned(),
+      DateOrToday::OnDate(date) => date.to_string(),
     }
   }
 }
@@ -124,21 +102,44 @@ impl ToUrlParameter for NaiveDate {
 }
 
 pub struct GetBodyRequest {
-  pub body_type: BodyType,
-  pub start_date: StartDate,
-  pub time_period: TimePeriod,
+  body_type: BodyType,
+  base_date: DateOrToday,
+  end_date: Option<NaiveDate>,
+  time_period: Option<TimePeriod>,
+}
+
+impl GetBodyRequest {
+  pub fn for_date_range(body_type: BodyType, base_date: DateOrToday, end_date: NaiveDate) -> Self {
+    Self {
+      body_type,
+      base_date,
+      end_date: Some(end_date),
+      time_period: None,
+    }
+  }
+
+  pub fn for_period(body_type: BodyType, base_date: DateOrToday, period: TimePeriod) -> Self {
+    Self {
+      body_type,
+      base_date,
+      end_date: None,
+      time_period: Some(period),
+    }
+  }
 }
 
 impl ToUrlPath for GetBodyRequest {
   fn to_url_path(&self) -> String {
     let body_type = self.body_type.to_url_parameter();
-    let start_date = self.start_date.to_url_parameter();
-    let time_period = self.time_period.to_url_parameter();
+    let start_date = self.base_date.to_url_parameter();
 
-    format!(
-      "/body/{}/date/{}/{}.json",
-      body_type, start_date, time_period
-    )
+    let suffix = if let Some(ref time_period) = self.time_period {
+      time_period.to_url_parameter()
+    } else {
+      self.end_date.unwrap().to_url_parameter()
+    };
+
+    format!("/body/{}/date/{}/{}.json", body_type, start_date, suffix)
   }
 }
 

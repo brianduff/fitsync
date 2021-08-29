@@ -1,13 +1,13 @@
 use std::sync::{Mutex, MutexGuard};
 
 use crate::{
-  destination::{Destination, DestinationConfig, Destinations},
-  fitbit::{BodyType, FitbitClient, GetBodyRequest, GetWeightLogsRequest, StartDate, TimePeriod},
+  destination::{Destination, Destinations},
+  fitbit::{BodyType, DateOrToday, FitbitClient, GetBodyRequest},
 };
 use anyhow::Result;
-use chrono::{NaiveDate, NaiveDateTime};
+use chrono::{Duration, NaiveDate, NaiveDateTime, Utc};
 
-use log::{info, warn};
+use log::info;
 
 pub struct SyncSession<'a> {
   destinations: MutexGuard<'a, Destinations>,
@@ -30,6 +30,16 @@ impl<'a> SyncSession<'a> {
   }
 }
 
+fn end_date_for(start_date: NaiveDate) -> NaiveDate {
+  let mut end_date = start_date + Duration::days(365);
+  let today = Utc::now().naive_utc().date();
+  if end_date > today {
+    end_date = today;
+  }
+
+  end_date
+}
+
 fn sync(
   destination: &Destination,
   fitbit_client: &FitbitClient,
@@ -37,18 +47,27 @@ fn sync(
 ) -> Result<()> {
   info!("Syncing to destination {:?}", destination);
 
-  let result = fitbit_client.get_body(GetBodyRequest {
-    body_type: BodyType::Weight,
-    start_date: StartDate::on_date(NaiveDate::from_ymd(2018, 8, 10)),
-    time_period: TimePeriod::Max,
-  })?;
-  destination.append_data(result.body_weight)?;
+  let last_synced_date = last_synced.map(|dt| dt.date());
+  let mut start_date = last_synced_date.unwrap_or_else(|| NaiveDate::from_ymd(2010, 1, 1));
+  let mut end_date = end_date_for(start_date);
 
-  let result = fitbit_client.get_weight_logs(GetWeightLogsRequest {
-    base_date: NaiveDate::from_ymd(2021, 8, 9),
-    time_period: TimePeriod::OneMonth,
-  })?;
-  println!("Weight logs: {:?}", result);
+  let now = Utc::now().naive_utc().date();
+
+  loop {
+    let result = fitbit_client.get_body(GetBodyRequest::for_date_range(
+      BodyType::Weight,
+      DateOrToday::OnDate(start_date),
+      end_date,
+    ))?;
+    destination.append_data(result.body_weight)?;
+
+    if end_date == now {
+      break;
+    }
+
+    start_date = end_date;
+    end_date = end_date_for(start_date);
+  }
 
   Ok(())
 }
