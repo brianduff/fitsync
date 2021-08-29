@@ -48,7 +48,7 @@ fn sync(
   info!("Syncing to destination {:?}", destination);
 
   let last_synced_date = last_synced.map(|dt| dt.date());
-  let mut start_date = last_synced_date.unwrap_or_else(|| NaiveDate::from_ymd(2010, 1, 1));
+  let mut start_date = last_synced_date.unwrap_or_else(|| NaiveDate::from_ymd(2016, 1, 1));
   let mut end_date = end_date_for(start_date);
 
   let now = Utc::now().naive_utc().date();

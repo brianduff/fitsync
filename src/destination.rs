@@ -1,14 +1,15 @@
 use std::{
   collections::HashMap,
-  fs::{read_to_string, File, OpenOptions},
+  fs::{read_to_string, File},
   io::Write,
   path::PathBuf,
 };
 
 use anyhow::Result;
 use chrono::{NaiveDateTime, Utc};
-use csv::Writer;
+use csv::{Reader, Writer};
 use directories::ProjectDirs;
+use float_cmp::approx_eq;
 use serde::{Deserialize, Serialize};
 
 use crate::fitbit::{FitbitClient, TimeSeriesValue};
@@ -21,16 +22,23 @@ pub struct CsvFile {
 }
 
 impl DestinationAppender for CsvFile {
-  fn append_data(&self, data: Vec<TimeSeriesValue>) -> Result<()> {
-    let file = OpenOptions::new()
-      .create(true)
-      .write(true)
-      .append(true)
-      .open(&self.path)?;
+  fn append_data(&self, mut data: Vec<TimeSeriesValue>) -> Result<()> {
+    let mut compressor = TimeSeriesCompressor::new();
 
-    let mut writer = Writer::from_writer(&file);
-    for d in data {
-      writer.serialize(&d)?;
+    if self.path.exists() {
+      let mut reader = Reader::from_path(&self.path)?;
+      for rec in reader.deserialize() {
+        compressor.values.push(rec?)
+      }
+    }
+
+    compressor.values.append(&mut data);
+
+    compressor.compress();
+
+    let mut writer = Writer::from_path(&self.path)?;
+    for rec in compressor.values {
+      writer.serialize(rec)?;
     }
 
     Ok(())
@@ -175,5 +183,45 @@ impl Destinations {
     file.write_all(&ser)?;
 
     Ok(())
+  }
+}
+
+struct TimeSeriesCompressor {
+  values: Vec<TimeSeriesValue>,
+}
+
+impl TimeSeriesCompressor {
+  fn new() -> Self {
+    Self { values: Vec::new() }
+  }
+
+  fn compress(&mut self) {
+    self.values.sort_by(|a, b| a.date_time.cmp(&b.date_time));
+
+    let mut copy = Vec::new();
+    copy.append(&mut self.values);
+
+    self._append_all(copy);
+  }
+
+  fn _append_all(&mut self, values: Vec<TimeSeriesValue>) {
+    for value in values {
+      self._append(value);
+    }
+  }
+
+  fn _append(&mut self, value: TimeSeriesValue) {
+    match self.values.last() {
+      None => self.values.push(value),
+      Some(prev_value) => {
+        // If the dates are equal, then we retain the last one.
+        if prev_value.date_time == value.date_time {
+          self.values.pop();
+          self.values.push(value);
+        } else if !approx_eq!(f32, prev_value.value, value.value) {
+          self.values.push(value)
+        }
+      }
+    }
   }
 }
